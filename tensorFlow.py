@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from six.moves import urllib
 import tensorflow.compat.v2.feature_column as fc
+import tensorflow_probability as tfp
 
 # Suppress TensorFlow warnings
 import os
@@ -95,7 +96,7 @@ for col in NUMERIC_COLUMNS:
     dfeval[col] = (dfeval[col] - dfeval[col].mean()) / dfeval[col].std()
 
 # Convert to numpy arrays
-X_train = dftrain.to_numpy()**
+X_train = dftrain.to_numpy()
 X_eval = dfeval.to_numpy()
 
 # Build the Keras model
@@ -125,4 +126,38 @@ plt.hist(pred_probs, bins=20, color='pink', alpha=0.7)
 plt.title('Predicted Probabilities')
 plt.xlabel('Probability of Survival')
 plt.ylabel('Frequency')
-plt.show()
+#plt.show()
+
+
+#----------------------------------------------------------------------------------------
+#hidden markov model(works with probabilities to predict future events or states)
+tfd = tfp.distributions  # making a shortcut for later on
+
+# Represent a cold day with 0 and a hot day with 1.
+# Suppose the first day of a sequence has a 0.8 chance of being cold.
+# We can model this using the categorical distribution:
+initial_distribution = tfd.Categorical(probs=[0.8, 0.2])  # Refer to point 2 above
+
+# Suppose a cold day has a 30% chance of being followed by a hot day
+# and a hot day has a 20% chance of being followed by a cold day.
+# We can model this as:
+transition_distribution = tfd.Categorical(probs=[[0.7, 0.3],
+                                                 [0.2, 0.8]])  # refer to points 3 and 4 above
+observation_distribution = tfd.Normal(loc=[0., 15.], scale=[5., 10.])  # refer to point 5 above
+
+# the loc argument represents the mean and the scale is the standard devitation (like for hot from -5 to 5, mean - 0)
+
+model = tfd.HiddenMarkovModel(
+    initial_distribution=initial_distribution,
+    transition_distribution=transition_distribution,
+    observation_distribution=observation_distribution,
+    num_steps=7)
+
+mean = model.mean()
+
+# due to the way TensorFlow works on a lower level we need to evaluate part of the graph
+# from within a session to see the value of this tensor
+
+# in the new version of tensorflow we need to use tf.compat.v1.Session() rather than just tf.Session()
+with tf.compat.v1.Session() as sess:
+  print(mean.numpy())
