@@ -1,16 +1,17 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-#paste it when working with tensorflow
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Set to '1' for warnings, '2' for errors, '3' for critical
-
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from six.moves import urllib
 import tensorflow.compat.v2.feature_column as fc
 
-import tensorflow as tf
+# Suppress TensorFlow warnings
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 string = tf.Variable("this is a string", tf.string)
 number = tf.Variable(324, tf.int16)
 floating = tf.Variable(3.567, tf.float64)
@@ -61,72 +62,67 @@ row_2_and_4 = tensor[1::2]  # selects second and fourth row
 column_1_in_row_2_and_3 = tensor[1:3, 0]
 # print(column_1_in_row_2_and_3)
 
-#----------------------------------------------------
+
+#----------------------------------------------------------
+#linear regression with keras
 # Load dataset
- # Load dataset.
-dftrain = pd.read_csv('https://storage.googleapis.com/tf-datasets/titanic/train.csv') # training data
-dfeval = pd.read_csv('https://storage.googleapis.com/tf-datasets/titanic/eval.csv') # testing data
-y_train = dftrain.pop('survived')# cutting column survived from dftrain and creating y_train with just this column
-y_eval = dfeval.pop('survived')
+dftrain = pd.read_csv('https://storage.googleapis.com/tf-datasets/titanic/train.csv')  # training data
+dfeval = pd.read_csv('https://storage.googleapis.com/tf-datasets/titanic/eval.csv')    # evaluation data
+y_train = dftrain.pop('survived')  # target variable for training
+y_eval = dfeval.pop('survived')    # target variable for evaluation
 
-# print("\n", dftrain.head())#first five rows
-# print(y_train) #1 stands for surveved, 0 - not
-
-# print(dftrain.describe()) #some statistical analysis of our data (f.e. count, mean, std, min, max, 25%, 75%)
-
-# print(dftrain.shape) #627 rows/entries, 9 columns/featuresdftrain.age.hist(bins=20)
-
-#dftrain.age.hist(bins=20)
-
-#dftrain.sex.value_counts().plot(kind='barh')
-
-#dftrain['class'].value_counts().plot(kind='barh')
-
-pd.concat([dftrain, y_train], axis=1).groupby('sex').survived.mean().plot(kind='barh').set_xlabel('% survive')
-#plt.show()
-
-
-
-CATEGORICAL_COLUMNS = ['sex', 'n_siblings_spouses', 'parch', 'class', 'deck',
-                       'embark_town', 'alone']
+# Preprocessing: Feature columns
+CATEGORICAL_COLUMNS = ['sex', 'n_siblings_spouses', 'parch', 'class', 'deck', 'embark_town', 'alone']
 NUMERIC_COLUMNS = ['age', 'fare']
 
-feature_columns = []
-for feature_name in CATEGORICAL_COLUMNS:
-     vocabulary = dftrain[feature_name].unique()  # gets a list of all unique values from given feature column
-     feature_columns.append(tf.feature_column.categorical_column_with_vocabulary_list(feature_name, vocabulary))
+#Converts categorical data into numerical format using pandas.Categorical
+def one_hot_encode(df, columns):
+    for col in columns:
+        df[col] = pd.Categorical(df[col])
+        df[col] = df[col].cat.codes
+    return df
 
-for feature_name in NUMERIC_COLUMNS:
-    feature_columns.append(tf.feature_column.numeric_column(feature_name, dtype=tf.float32))
+dftrain = one_hot_encode(dftrain, CATEGORICAL_COLUMNS)
+dfeval = one_hot_encode(dfeval, CATEGORICAL_COLUMNS)
 
-print(feature_columns)
+# Fill missing values
+dftrain.fillna(dftrain.mean(), inplace=True)
+dfeval.fillna(dfeval.mean(), inplace=True)
 
+# Normalize numeric columns
+for col in NUMERIC_COLUMNS:
+    dftrain[col] = (dftrain[col] - dftrain[col].mean()) / dftrain[col].std()
+    dfeval[col] = (dfeval[col] - dfeval[col].mean()) / dfeval[col].std()
 
-def make_input_fn(data_df, label_df, num_epochs=10, shuffle=True, batch_size=32):
-  def input_function():  # inner function, this will be returned
-    ds = tf.data.Dataset.from_tensor_slices((dict(data_df), label_df))  # create tf.data.Dataset object with data and its label
-    if shuffle:
-      ds = ds.shuffle(1000)  # randomize order of data
-    ds = ds.batch(batch_size).repeat(num_epochs)  # split dataset into batches of 32 and repeat process for number of epochs
-    return ds  # return a batch of the dataset
-  return input_function  # return a function object for use
+# Convert to numpy arrays
+X_train = dftrain.to_numpy()**
+X_eval = dfeval.to_numpy()
 
-train_input_fn = make_input_fn(dftrain, y_train)  # here we will call the input_function that was returned to us to get a dataset object we can feed to the model
-eval_input_fn = make_input_fn(dfeval, y_eval, num_epochs=1, shuffle=False)
-train_input_fn = make_input_fn(dftrain, y_train)  # here we will call the input_function that was returned to us to get a dataset object we can feed to the model
-eval_input_fn = make_input_fn(dfeval, y_eval, num_epochs=1, shuffle=False)
+# Build the Keras model
+model = tf.keras.Sequential([
+    tf.keras.layers.Dense(32, activation='relu', input_shape=(X_train.shape[1],)),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(1, activation='sigmoid')  # Output layer for binary classification
+])
 
-linear_est = tf.estimator.LinearClassifier(feature_columns=feature_columns)
-# We create a linear estimtor by passing the feature columns we created earlier
+# Compile the model
+model.compile(optimizer='adam',
+              loss='binary_crossentropy',
+              metrics=['accuracy'])
 
-linear_est.train(train_input_fn)  # train
-result = linear_est.evaluate(eval_input_fn)  # get model metrics/stats by testing on tetsing data
+# Train the model
+history = model.fit(X_train, y_train, epochs=20, batch_size=32, validation_split=0.2)
 
-clear_output()  # clears consoke output
-print(result['accuracy'])  # the result variable is simply a dict of stats about our model
+# Evaluate the model
+loss, accuracy = model.evaluate(X_eval, y_eval)
+print(f"Evaluation accuracy: {accuracy:.2f}")
 
-pred_dicts = list(linear_est.predict(eval_input_fn))
-probs = pd.Series([pred['probabilities'][1] for pred in pred_dicts])
+# Predict probabilities
+pred_probs = model.predict(X_eval).flatten()
 
-probs.plot(kind='hist', bins=20, title='predicted probabilities')
+# Plot predicted probabilities
+plt.hist(pred_probs, bins=20, color='pink', alpha=0.7)
+plt.title('Predicted Probabilities')
+plt.xlabel('Probability of Survival')
+plt.ylabel('Frequency')
 plt.show()
