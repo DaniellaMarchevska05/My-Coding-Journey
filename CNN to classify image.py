@@ -10,7 +10,7 @@ from keras.preprocessing.image import ImageDataGenerator
 (train_images, train_labels), (test_images, test_labels) = datasets.cifar10.load_data()
 
 # Normalize pixel values to be between 0 and 1
-train_images, test_images = train_images / 255.0, test_images / 255.0
+train_images, test_images = train_images / 255.0, test_images / 255.0  #input images normalized to the range [0, 1]
 
 class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
                'dog', 'frog', 'horse', 'ship', 'truck']
